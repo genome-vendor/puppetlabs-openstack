@@ -3,7 +3,10 @@
 # usage: include from controller, declare from worker
 # This is to handle dependency
 # depends on openstack::profile::base having been added to a node
-class havana::common::nova ($is_compute = false) {
+class havana::common::nova (
+  $is_compute = false,
+  $default_floating_pool = hiera('openstack::default_floating_pool', 'public'),
+) {
   $is_controller = $::havana::profile::base::is_controller
 
   $management_network = hiera('openstack::network::management')
@@ -23,7 +26,7 @@ class havana::common::nova ($is_compute = false) {
     verbose            => hiera('openstack::verbose'),
   }
 
-  nova_config { 'DEFAULT/default_floating_pool': value => 'public' }
+  nova_config { 'DEFAULT/default_floating_pool': value => $default_floating_pool }
 
   class { '::nova::api':
     admin_password                       => hiera('openstack::nova::password'),
