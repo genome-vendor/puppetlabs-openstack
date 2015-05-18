@@ -4,50 +4,48 @@
 # Flags install individual services as needed
 # This follows the suggest deployment from the neutron Administrator Guide.
 class openstack::common::neutron {
-  $controller_management_address = hiera('openstack::controller::address::management')
+  $is_controller = $::openstack::profile::base::is_controller
 
-  $data_network = hiera('openstack::network::data')
+  $controller_management_address = $::openstack::config::controller_address_management
+
+  $data_network = $::openstack::config::network_data
   $data_address = ip_for_network($data_network)
 
   # neutron auth depends upon a keystone configuration
   include ::openstack::common::keystone
 
+  $user                = $::openstack::config::mysql_user_neutron
+  $pass                = $::openstack::config::mysql_pass_neutron
+  $database_connection = "mysql://${user}:${pass}@${controller_management_address}/neutron"
+
+
   class { '::neutron':
     rabbit_host           => $controller_management_address,
-    core_plugin           => 'neutron.plugins.openvswitch.ovs_neutron_plugin.OVSNeutronPluginV2',
+    core_plugin           => $::openstack::config::neutron_core_plugin,
     allow_overlapping_ips => true,
-    rabbit_user           => hiera('openstack::rabbitmq::user'),
-    rabbit_password       => hiera('openstack::rabbitmq::password'),
-    debug                 => hiera('openstack::debug'),
-    verbose               => hiera('openstack::verbose'),
-    service_plugins       => ['neutron.services.loadbalancer.plugin.LoadBalancerPlugin',
-                              'neutron.services.vpn.plugin.VPNDriverPlugin',
-                              'neutron.services.firewall.fwaas_plugin.FirewallPlugin',
-                              'neutron.services.metering.metering_plugin.MeteringPlugin'],
+    rabbit_user           => $::openstack::config::rabbitmq_user,
+    rabbit_password       => $::openstack::config::rabbitmq_password,
+    rabbit_hosts          => $::openstack::config::rabbitmq_hosts,
+    debug                 => $::openstack::config::debug,
+    verbose               => $::openstack::config::verbose,
+    service_plugins       => $::openstack::config::neutron_service_plugins,
   }
 
   class { '::neutron::keystone::auth':
-    password         => hiera('openstack::neutron::password'),
-    public_address   => hiera('openstack::controller::address::api'),
-    admin_address    => hiera('openstack::controller::address::management'),
-    internal_address => hiera('openstack::controller::address::management'),
-    region           => hiera('openstack::region'),
+    password         => $::openstack::config::neutron_password,
+    public_address   => $::openstack::config::controller_address_api,
+    admin_address    => $::openstack::config::controller_address_management,
+    internal_address => $::openstack::config::controller_address_management,
+    region           => $::openstack::config::region,
   }
 
   class { '::neutron::server':
-    auth_host           => hiera('openstack::controller::address::management'),
-    auth_password       => hiera('openstack::neutron::password'),
-    database_connection => $::openstack::resources::connectors::neutron,
-    enabled             => $::openstack::profile::base::is_controller,
-    sync_db             => $::openstack::profile::base::is_controller,
+    auth_host           => $::openstack::config::controller_address_management,
+    auth_password       => $::openstack::config::neutron_password,
+    database_connection => $database_connection,
+    enabled             => $is_controller,
+    sync_db             => $is_controller,
     mysql_module        => '2.2',
-  }
-
-  class { '::neutron::server::notifications':
-    nova_url            => "http://${controller_management_address}:8774/v2/",
-    nova_admin_auth_url => "http://${controller_management_address}:35357/v2.0/",
-    nova_admin_password => hiera('openstack::nova::password'),
-    nova_region_name    => hiera('openstack::region'),
   }
 
   if $::osfamily == 'redhat' {
